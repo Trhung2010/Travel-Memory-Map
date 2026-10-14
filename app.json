@@ -1,0 +1,19 @@
+{
+  "expo": {
+    "name": "LUMA Camera",
+    "slug": "luma-camera",
+    "scheme": "lumacamera",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "dark",
+    "android": {
+      "package": "com.lumacamera.personal",
+      "adaptiveIcon": { "backgroundColor": "#101318" }
+    },
+    "plugins": [
+      ["expo-camera", { "recordAudioAndroid": false, "barcodeScannerEnabled": false }],
+      ["expo-media-library", { "photosPermission": "Cho phép LUMA xem ảnh để xuất ảnh", "savePhotosPermission": "Cho phép LUMA lưu ảnh vào thư viện hệ thống", "granularPermissions": ["photo"] }],
+      "expo-router"
+    ]
+  }
+}
