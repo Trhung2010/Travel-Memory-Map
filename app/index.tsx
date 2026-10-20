@@ -71,6 +71,7 @@ export default function CameraScreen(){
       <View><Text style={styles.brand}>LUMA</Text><Text style={styles.subtitle}>{pro?'PRO ASSIST':'PHOTO'}</Text></View>
       <View style={styles.row}>
         <Pressable style={styles.topButton} onPress={()=>setFlash(x=>flashModes[(flashModes.indexOf(x)+1)%3])}><Text style={styles.topText}>⚡ {flash.toUpperCase()}</Text></Pressable>
+        <Pressable style={styles.topButton} onPress={()=>router.push({pathname:'/moments/[scene]',params:{scene:'welcome'}})}><Text style={styles.topText}>MOMENTS</Text></Pressable>
         <Pressable style={styles.topButton} onPress={()=>router.push('/settings')}><Text style={styles.topText}>⚙</Text></Pressable>
       </View>
     </View>
