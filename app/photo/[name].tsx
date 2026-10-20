@@ -31,6 +31,7 @@ export default function Photo(){
     <Image source={{uri:photo.uri}} resizeMode="contain" style={styles.image}/>
     <View style={styles.meta}><Text style={styles.file} numberOfLines={2}>{name}</Text><Text style={styles.size}>{(photo.size/1048576).toFixed(2)} MB · JPEG</Text></View>
     <View style={styles.actions}>
+      <Action title="Chia sẻ Moments" onPress={()=>router.push({pathname:'/moments/[scene]',params:{scene:'edit',name}})} style={{flex:1}}/>
       <Action title="Tô màu" onPress={()=>router.push({pathname:'/presets',params:{name}})} style={{flex:1}}/>
       <Action title={exporting?'Đang xuất...':'Xuất Android'} onPress={()=>{void exportPhoto()}} secondary disabled={exporting} style={{flex:1}}/>
     </View>
