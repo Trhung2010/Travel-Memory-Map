@@ -1,43 +1,36 @@
-# LUMA Moments (Android)
+# LUMA Camera
 
-LUMA Moments là ứng dụng React Native / Expo SDK 57 để chụp ảnh vuông, chia sẻ riêng với bạn bè và xem ảnh nhận được trên widget Android. Dự án có 20 trạng thái màn hình điều hướng bằng Expo Router. Camera, Color Studio và ảnh cá nhân chạy offline; tài khoản, kết bạn, gửi/nhận ảnh và thông báo trong app dùng Supabase.
+LUMA Camera là ứng dụng chụp và chỉnh ảnh chạy bằng Expo Go. Ảnh, bản chỉnh sửa, album và danh sách yêu thích nằm trên điện thoại. Ứng dụng không cần tài khoản, Supabase hay máy chủ.
 
-## Chạy dự án
+## Chạy trên điện thoại
 
-Cần Node.js 22.13+ và Expo Go trên điện thoại. Sau khi clone:
+Cần Node.js và Expo Go. Trong thư mục dự án:
 
 ```powershell
 npm ci
 npm run check
-npx expo start --go --clear
+npm start -- --port 8082 --clear
 ```
 
-Quét mã QR bằng Expo Go để dùng camera và phần chia sẻ. Expo Go không chứa widget trên màn hình chính; widget và thông báo đẩy từ xa cần bản build riêng qua EAS khi bạn muốn dùng chúng. Dự án cần EAS `projectId` để đăng ký Expo Push Token. Chưa cấu hình Supabase, app vẫn chụp và chỉnh ảnh cá nhân nhưng không thể đăng nhập/gửi ảnh.
+Quét QR bằng Expo Go. Nếu điện thoại không kết nối được qua LAN, chạy `npm start -- --tunnel` thay cho lệnh cuối. Không cần Android Studio, Android SDK hay Gradle.
 
-## Cấu hình Supabase
+## Sử dụng
 
-Xem [supabase/README.md](supabase/README.md) và tạo `.env` từ `.env.example`. Chỉ đặt URL và anon key công khai trong app. Không bao giờ đặt service role key trong `EXPO_PUBLIC_*`.
+App mở thẳng Camera. **Chụp thường** tập trung vào thao tác nhanh; **Chụp Pro** có thanh điều khiển mở ở cạnh phải cho zoom theo phần trăm phạm vi thiết bị, đèn flash, lấy nét, hẹn giờ, lưới và chất lượng JPEG. Đóng thanh để xem trọn khung ngắm; bấm chụp cũng tự đóng thanh. Pro không giả lập ISO, tốc độ màn trập hoặc RAW khi Expo Go không hỗ trợ.
 
-## Luồng sử dụng
+Bộ lọc có sẵn trên thanh dưới camera. Ảnh sau khi chụp được lưu trong LUMA và có thể cắt, xoay, chỉnh màu, thêm chữ hoặc hình dán, so sánh trước/sau. Mọi thao tác tạo một file mới và giữ ảnh gốc. Từ Chi tiết ảnh, bạn có thể lưu bản sao vào thư viện điện thoại hoặc mở bảng chia sẻ để gửi bằng ứng dụng khác.
 
-1. Đăng ký, xác nhận email nếu dự án Supabase bật xác nhận, đăng nhập và tạo username.
-2. Tìm bạn → gửi lời mời → người nhận chấp nhận.
-3. Chụp ảnh vuông → viết lời nhắn hoặc mở Color Studio → chọn người nhận → gửi.
-4. Nếu mạng mất, ảnh được sao chép vào SQLite/file riêng dưới trạng thái chờ hoặc thất bại. App thử gửi lại khi mở; màn Kỷ niệm có nút thử lại và hủy. Mỗi ảnh dùng cùng một mã giao dịch để tránh gửi trùng.
-5. Người nhận xem trong Khoảnh khắc, thả cảm xúc và có thể đánh dấu đã xem. Màn Thông báo lưu sự kiện trong Supabase.
-6. APK Android có widget LUMA Moments. Thêm widget từ trình chọn widget của màn hình chính; chọn bạn bè và đồng bộ ảnh trong app. Widget cập nhật khi app mở hoặc nhấn đồng bộ, hiện chưa tự tải ảnh khi app hoàn toàn đóng.
+20 scene: Chụp thường, Chụp Pro, Bộ lọc, Xem thử bộ lọc, Ảnh vừa chụp, Chỉnh sửa ảnh, Cắt và xoay, Ánh sáng và màu, Chữ và hình dán, Trước và sau, Xuất ảnh, Chia sẻ ảnh, Thư viện LUMA, Chi tiết ảnh, Album, Chi tiết album, Ảnh yêu thích, Tìm ảnh, Kỷ niệm, Cài đặt và lưu trữ. Camera thường là route `/`; các scene còn lại dùng `/studio/[scene]`.
 
-20 scene: Welcome, Login, Register, Profile Setup, Camera, Edit, Send, Inbox, Moment Detail, Memories, Memory Detail, Friends, Find Friends, Friend Requests, Friend Profile, Widget Setup, Notifications, My Profile, Settings, Privacy. Camera là route `/`; các màn khác là `/moments/[scene]` với giá trị `scene` tương ứng.
-
-Ảnh nhận được cần Internet để lấy URL có hạn sử dụng. File widget nằm trong bộ nhớ riêng của app và được xóa khi đăng xuất. Ảnh cá nhân chưa xuất khỏi app có thể mất khi gỡ ứng dụng.
+Ảnh trong vùng dữ liệu LUMA có thể mất khi gỡ ứng dụng hoặc xóa dữ liệu của app. Hãy dùng **Lưu vào máy** cho ảnh cần giữ bên ngoài LUMA. Ảnh và tài khoản từ bản Supabase cũ không tự chuyển sang phiên bản local này; bản local không xóa dữ liệu đang nằm trong project Supabase cũ.
 
 ## Kiểm tra
 
 ```powershell
 npm run check
-npx expo install --check
-npx expo export --platform android
 npx expo-doctor
+npx expo export --platform android
+npx expo export --platform ios
 ```
 
-`npx expo export` kiểm tra bundle JS, chưa kiểm tra widget native. Các luồng đăng nhập, gửi/nhận và quyền ảnh phải kiểm tra với Supabase thật và hai tài khoản khác nhau. Chưa có URL/khóa Supabase trong repository nên không thể xác nhận các luồng cloud bằng test tại đây.
+Hai lệnh export chỉ kiểm tra bundle Expo, không cần công cụ Android gốc.
