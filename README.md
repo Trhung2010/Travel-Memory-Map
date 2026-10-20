@@ -1,87 +1,43 @@
-# LUMA Camera — Personal Edition (Android)
+# LUMA Moments (Android)
 
-Ứng dụng **React Native / Expo SDK 57**, sử dụng `expo-camera` thực sự trên Android. Offline, không backend, không API key.
+LUMA Moments là ứng dụng React Native / Expo SDK 57 để chụp ảnh vuông, chia sẻ riêng với bạn bè và xem ảnh nhận được trên widget Android. Dự án có 20 trạng thái màn hình điều hướng bằng Expo Router. Camera, Color Studio và ảnh cá nhân chạy offline; tài khoản, kết bạn, gửi/nhận ảnh và thông báo trong app dùng Supabase.
 
-## Những gì đã có trong source
+## Chạy dự án
 
-- Camera thật: xin quyền, preview, chụp JPEG, flash Off/Auto/On, đổi camera, zoom tương đối, hẹn giờ.
-- Pro Assist: lưới 3×3, hẹn giờ, thay đổi kích thước ảnh theo thiết bị, chất lượng JPEG.
-- Gallery nội bộ: liệt kê, xem, xóa ảnh có xác nhận.
-- Xuất ảnh riêng ra thư viện Android (xin quyền ghi ảnh).
-- Color Studio: preview 6 preset cảm hứng Leica / Hasselblad / ZEISS, chỉnh cường độ, so sánh ảnh gốc, **áp ma trận màu lên pixel và xuất JPEG mới** qua Skia.
-- Lưu dữ liệu offline: `expo-file-system` vào app Documents, preferences trong AsyncStorage.
-
-### Quan trọng
-
-Preset **không phải** LUT/profile màu thương mại của các hãng. Pro Assist **không** điều khiển ISO, tốc độ màn trập, RAW hay Camera2 trực tiếp. Ảnh đã chỉnh màu giới hạn 2048px cạnh dài để tránh lỗi bộ nhớ trên Android; ảnh gốc không bị đổi hoặc hạ độ phân giải bởi công đoạn này. Zoom hiển thị bằng nội suy trên tham số `zoom` chứ không đo tiêu cự/quang học.
-
-## Cách chạy thật trên Android, từ VS Code
-
-1. Cài **Node.js 22.13+**, VS Code và ứng dụng **Expo Go** trên điện thoại Android.
-2. Giải nén rồi mở thư mục `LUMA-Camera` trong VS Code.
-3. Mở Terminal, chạy:
+Cần Node.js 22.13+ và Expo Go trên điện thoại. Sau khi clone:
 
 ```powershell
-npm install
-npx expo install --fix
+npm ci
 npm run check
-npx expo start --clear
+npx expo start --go --clear
 ```
 
-4. Điện thoại và máy tính kết nối cùng Wi-Fi; mở **Expo Go** quét QR từ Terminal.
-5. Cấp quyền camera. Chụp ảnh → LUMA Photo Viewer → Color Studio → lưu ảnh mới → Xuất Android.
-6. Khi máy và điện thoại không cùng Wi-Fi, có thể thử `npx expo start --tunnel` (cần mạng khi phát triển).
+Quét mã QR bằng Expo Go để dùng camera và phần chia sẻ. Expo Go không chứa widget trên màn hình chính; widget và thông báo đẩy từ xa cần bản build riêng qua EAS khi bạn muốn dùng chúng. Dự án cần EAS `projectId` để đăng ký Expo Push Token. Chưa cấu hình Supabase, app vẫn chụp và chỉnh ảnh cá nhân nhưng không thể đăng nhập/gửi ảnh.
 
-> **VS Code không phải môi trường chạy app**: VS Code chỉ để chỉnh sửa code; Metro bundler phục vụ JavaScript, còn app chạy trong **Expo Go Android**. Khi build APK, đây là ứng dụng Android độc lập.
+## Cấu hình Supabase
 
-## Xuất APK
+Xem [supabase/README.md](supabase/README.md) và tạo `.env` từ `.env.example`. Chỉ đặt URL và anon key công khai trong app. Không bao giờ đặt service role key trong `EXPO_PUBLIC_*`.
+
+## Luồng sử dụng
+
+1. Đăng ký, xác nhận email nếu dự án Supabase bật xác nhận, đăng nhập và tạo username.
+2. Tìm bạn → gửi lời mời → người nhận chấp nhận.
+3. Chụp ảnh vuông → viết lời nhắn hoặc mở Color Studio → chọn người nhận → gửi.
+4. Nếu mạng mất, ảnh được sao chép vào SQLite/file riêng dưới trạng thái chờ hoặc thất bại. App thử gửi lại khi mở; màn Kỷ niệm có nút thử lại và hủy. Mỗi ảnh dùng cùng một mã giao dịch để tránh gửi trùng.
+5. Người nhận xem trong Khoảnh khắc, thả cảm xúc và có thể đánh dấu đã xem. Màn Thông báo lưu sự kiện trong Supabase.
+6. APK Android có widget LUMA Moments. Thêm widget từ trình chọn widget của màn hình chính; chọn bạn bè và đồng bộ ảnh trong app. Widget cập nhật khi app mở hoặc nhấn đồng bộ, hiện chưa tự tải ảnh khi app hoàn toàn đóng.
+
+20 scene: Welcome, Login, Register, Profile Setup, Camera, Edit, Send, Inbox, Moment Detail, Memories, Memory Detail, Friends, Find Friends, Friend Requests, Friend Profile, Widget Setup, Notifications, My Profile, Settings, Privacy. Camera là route `/`; các màn khác là `/moments/[scene]` với giá trị `scene` tương ứng.
+
+Ảnh nhận được cần Internet để lấy URL có hạn sử dụng. File widget nằm trong bộ nhớ riêng của app và được xóa khi đăng xuất. Ảnh cá nhân chưa xuất khỏi app có thể mất khi gỡ ứng dụng.
+
+## Kiểm tra
 
 ```powershell
-npm install -g eas-cli
-npx eas login
-npx eas build --platform android --profile preview
+npm run check
+npx expo install --check
+npx expo export --platform android
+npx expo-doctor
 ```
 
-Sau khi build hoàn tất, Expo/EAS cung cấp link APK. APK vẫn chụp ảnh offline khi không có mạng. Lần build cloud và cài npm cần Internet.
-
-## Lưu ý kiểm thử
-
-- **Chưa chạy trên thiết bị Android thật trong môi trường tạo source này**. Cần kiểm tra quyền camera, vòng đời CameraView và khả năng xử lý Skia trên máy của bạn trước khi kết luận production-ready.
-- Chụp 1 ảnh, thoát app hoàn toàn rồi mở lại: ảnh vẫn xuất hiện trong Gallery.
-- Chọn Pro Assist, xem danh sách size; Android khác nhau có thể trả ra size khác nhau.
-- Áp Leica Classic và Original, đối chiếu bằng mắt và dung lượng/độ phân giải file mới.
-- Thử ảnh 12MP/50MP; Skia chỉ xử lý bản resize 2048px, tránh OOM.
-- Thử xóa ảnh, xuất Android rồi xóa ảnh nội bộ: bản bên Android phải vẫn còn.
-- Gỡ ứng dụng khi chưa xuất ảnh **có thể làm mất toàn bộ ảnh** trong Documents nội bộ.
-
-## Những việc chưa có
-
-- Chỉnh ISO, shutter, white balance phần cứng, RAW/DNG.
-- Preset xem trực tiếp trên luồng video camera. Preset chỉ chạy hậu kỳ.
-- Chọn trực tiếp ống kính tele/ultrawide và HDR hãng.
-- Máy Android đòi hỏi native module tùy biến có thể cần **development build** thay vì Expo Go.
-
-## Tài liệu chính thức
-
-- https://docs.expo.dev/versions/v57.0.0/sdk/camera/
-- https://docs.expo.dev/versions/v57.0.0/sdk/filesystem/
-- https://docs.expo.dev/versions/v57.0.0/sdk/media-library/
-- https://shopify.github.io/react-native-skia/
-
-## Cấu trúc
-
-```text
-app/
-  _layout.tsx             Navigation + Providers
-  index.tsx               Camera/Pro Assist
-  gallery.tsx             Thư viện
-  photo/[name].tsx        Ảnh chi tiết và xóa/xuất
-  presets.tsx             Chỉnh màu ảnh thật
-  settings.tsx            Cài đặt
-src/
-  components/Ui.tsx       UI tái sử dụng
-  lib/gallery.ts          Quản lý file offline
-  lib/presets.ts          Ma trận màu
-  state/Prefs.tsx         Preferences + AsyncStorage
-  theme/colors.ts         Design tokens
-```
+`npx expo export` kiểm tra bundle JS, chưa kiểm tra widget native. Các luồng đăng nhập, gửi/nhận và quyền ảnh phải kiểm tra với Supabase thật và hai tài khoản khác nhau. Chưa có URL/khóa Supabase trong repository nên không thể xác nhận các luồng cloud bằng test tại đây.

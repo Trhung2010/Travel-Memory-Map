@@ -2,7 +2,8 @@ node_modules/
 .expo/
 dist/
 build/
-android/
-ios/
+/android/
+/ios/
+.expo-export-check/
 *.log
 .env

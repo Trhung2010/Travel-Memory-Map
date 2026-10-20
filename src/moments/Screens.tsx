@@ -5,6 +5,9 @@ import {SafeAreaView} from 'react-native-safe-area-context';
 import {fileFor,listPhotos} from '../lib/gallery';
 import {C} from '../theme/colors';
 import * as api from './api';
+import {discardOutgoing,flushOutgoing,listOutgoing,queueMoment,type PendingMoment} from './queue';
+import {clearWidget,getWidgetSource,setWidgetSource,syncWidget,widgetAvailable} from './widget';
+import {disablePush,enablePush,pushEnabled} from './push';
 
 export const SCENES=[
  'welcome','login','register','profile-setup','camera','edit','send','inbox','moment','memories',
@@ -27,7 +30,7 @@ function Card({children}:{children:React.ReactNode}){return <View style={styles.
 function Empty({text}:{text:string}){return <Text style={styles.empty}>{text}</Text>;}
 export default function MomentsScene(){
  const router=useRouter();
- const params=useLocalSearchParams<{scene:string;id?:string;name?:string}>();
+ const params=useLocalSearchParams<{scene:string;id?:string;name?:string;caption?:string}>();
  const scene=(SCENES.includes(params.scene as Scene)?params.scene:'welcome') as Scene;
  const id=typeof params.id==='string'?params.id:'';
  const name=typeof params.name==='string'?params.name:'';
@@ -43,6 +46,8 @@ export default function MomentsScene(){
  const [people,setPeople]=useState<api.Profile[]>([]);
  const [friendList,setFriendList]=useState<api.Profile[]>([]);
  const [invites,setInvites]=useState<api.FriendRequest[]>([]);
+  const [sentInvites,setSentInvites]=useState<api.FriendRequest[]>([]);
+  const [requestPeople,setRequestPeople]=useState<Record<string,api.Profile>>({});
  const [items,setItems]=useState<api.Moment[]>([]);
  const [current,setCurrent]=useState<api.Moment|null>(null);
  const [person,setPerson]=useState<api.Profile|null>(null);
@@ -51,6 +56,9 @@ export default function MomentsScene(){
  const [notifications,setNotifications]=useState<api.Notice[]>([]);
  const [blocked,setBlocked]=useState<{blocked_id:string}[]>([]);
  const [reactions,setReactions]=useState<{emoji:string}[]>([]);
+  const [outgoing,setOutgoing]=useState<PendingMoment[]>([]);
+  const [widgetFriend,setWidgetFriend]=useState<string|null>(null);
+  const [devicePush,setDevicePush]=useState(false);
  const go=useCallback((target:Scene,extra:Record<string,string>={})=>router.push({pathname:'/moments/[scene]',params:{scene:target,...extra}}),[router]);
  const work=async(task:()=>Promise<void>)=>{setBusy(true);setError('');try{await task();}catch(e){const text=e instanceof Error?e.message:String(e);setError(text);Alert.alert('Không thể thực hiện',text);}finally{setBusy(false);}};
  const refresh=useCallback(async()=>{
@@ -61,29 +69,48 @@ export default function MomentsScene(){
    if(scene==='edit'||scene==='send'){setPhotos(listPhotos());if(scene==='send'&&s)setFriendList(await api.friends());}
    if(!s)return;
    if(scene==='friends'||scene==='send')setFriendList(await api.friends());
-   if(scene==='requests')setInvites(await api.requests());
-   if(scene==='find-friends'&&term.trim().length>=2)setPeople(await api.findPeople(term));
-   if(scene==='inbox'||scene==='memories'){
+    if(scene==='widget'){setFriendList(await api.friends());setWidgetFriend(await getWidgetSource());}
+    if(scene==='requests'){
+      const [received,sent]=await Promise.all([api.requests(),api.sentRequests()]);
+      setInvites(received);setSentInvites(sent);
+      const ids=[...new Set([...received.map(r=>r.sender_id),...sent.map(r=>r.recipient_id)])];
+      const profiles=await Promise.all(ids.map(personId=>api.profile(personId).catch(()=>null)));
+      setRequestPeople(Object.fromEntries(profiles.filter((p):p is api.Profile=>p!==null).map(p=>[p.id,p])));
+    }
+    if(scene==='inbox'||scene==='memories'){
+     if(scene==='memories')setOutgoing(listOutgoing(s.user.id));
     const found=await api.moments(scene==='inbox'?'inbox':'all');
     setItems(found);
     const urls:Record<string,string>={};
     await Promise.all(found.map(async m=>{try{urls[m.id]=await api.photoUrl(m.media_path);}catch{}}));
     setPhotoUrls(urls);
+     if(scene==='inbox')void syncWidget().catch(console.warn);
    }
    if((scene==='moment'||scene==='memory-detail')&&id){
     const m=await api.moment(id);setCurrent(m);
-    if(m){setPicture(await api.photoUrl(m.media_path));setReactions(await api.reactionCount(m.id));setPerson(await api.profile(m.owner_id));}
+     if(m){setPicture(await api.photoUrl(m.media_path));setReactions(await api.reactionCount(m.id));setPerson(await api.profile(m.owner_id));if(m.owner_id!==s.user.id)await api.markSeen(m.id);}
    }
    if(scene==='friend-profile'&&id)setPerson(await api.profile(id));
    if(scene==='profile'||scene==='profile-setup'){const p=await api.myProfile();setPerson(p);if(p){setDisplayName(p.display_name);setHandle(p.handle);}}
-   if(scene==='notifications')setNotifications(await api.notices());
+    if(scene==='notifications'){setNotifications(await api.notices());setDevicePush(await pushEnabled());}
    if(scene==='privacy')setBlocked(await api.blocks());
   }catch(e){setError(e instanceof Error?e.message:String(e));}
   finally{setLoading(false);}
- },[scene,id,term]);
+ },[scene,id]);
  useFocusEffect(useCallback(()=>{void refresh();},[refresh]));
- useEffect(()=>{if(scene==='find-friends'&&term.length>=2){const timer=setTimeout(()=>{void refresh();},350);return ()=>clearTimeout(timer);}},[term,scene,refresh]);
- const needAuth=!account&&!['welcome','login','register','camera','edit','settings','widget'].includes(scene);
+ useEffect(()=>{
+  if(scene!=='find-friends')return;
+  if(term.trim().length<2){setPeople([]);return;}
+  let active=true;
+  const timer=setTimeout(()=>{
+   setLoading(true);setError('');
+   void api.findPeople(term).then(found=>{if(active)setPeople(found);}).catch(e=>{
+    if(active)setError(e instanceof Error?e.message:String(e));
+   }).finally(()=>{if(active)setLoading(false);});
+  },350);
+  return ()=>{active=false;clearTimeout(timer);};
+ },[term,scene]);
+  const needAuth=!account&&!['welcome','login','register','camera','edit','settings'].includes(scene);
  const photo=(()=>{try{return name?fileFor(name):null;}catch{return null;}})();
  const photoUri=photo?.exists?photo.uri:'';
  const sceneBody=()=>{
@@ -94,7 +121,7 @@ export default function MomentsScene(){
   case 'login':case 'register':return <><Text style={styles.body}>Dùng email và mật khẩu để {scene==='login'?'truy cập':'tạo'} tài khoản LUMA.</Text>
     <TextInput style={styles.input} placeholder="Email" placeholderTextColor={C.muted} keyboardType="email-address" autoCapitalize="none" value={email} onChangeText={setEmail}/>
     <TextInput style={styles.input} placeholder="Mật khẩu (ít nhất 6 ký tự)" placeholderTextColor={C.muted} secureTextEntry value={password} onChangeText={setPassword}/>
-    <Action disabled={busy||!email.includes('@')||password.length<6} label={scene==='login'?'Đăng nhập':'Đăng ký'} onPress={()=>void work(async()=>{if(scene==='login'){await api.signIn(email,password);go('inbox');}else{const active=await api.signUp(email,password);if(active)go('profile-setup');else Alert.alert('Kiểm tra email','Xác nhận địa chỉ email rồi đăng nhập.');}})}/>
+    <Action disabled={busy||!email.includes('@')||password.length<6} label={scene==='login'?'Đăng nhập':'Đăng ký'} onPress={()=>void work(async()=>{if(scene==='login'){await api.signIn(email,password);go((await api.myProfile())?'inbox':'profile-setup');}else{const active=await api.signUp(email,password);if(active)go('profile-setup');else Alert.alert('Kiểm tra email','Xác nhận địa chỉ email rồi đăng nhập.');}})}/>
     <Action secondary label={scene==='login'?'Chưa có tài khoản? Đăng ký':'Đã có tài khoản? Đăng nhập'} onPress={()=>go(scene==='login'?'register':'login')}/></>;
   case 'profile-setup':return <><Text style={styles.body}>Chọn tên hiển thị và tên người dùng duy nhất.</Text><TextInput style={styles.input} placeholder="Tên hiển thị" placeholderTextColor={C.muted} value={displayName} onChangeText={setDisplayName}/>
     <TextInput style={styles.input} placeholder="username" autoCapitalize="none" placeholderTextColor={C.muted} value={handle} onChangeText={setHandle}/>
@@ -111,13 +138,21 @@ export default function MomentsScene(){
     <Text style={styles.meta}>{friendList.length} bạn bè · đã chọn {selected.length}</Text>
     {friendList.map(p=><Pressable key={p.id} onPress={()=>setSelected(v=>v.includes(p.id)?v.filter(x=>x!==p.id):[...v,p.id])} style={styles.listRow}><Text style={styles.title}>{selected.includes(p.id)?'☑ ':'□ '}{p.display_name||p.handle}</Text><Text style={styles.meta}>@{p.handle}</Text></Pressable>)}
     {!friendList.length&&<Empty text="Chưa có bạn bè. Gửi lời mời và được chấp nhận trước khi gửi ảnh."/>}
-    <Action label="Gửi ảnh thật" disabled={!photoUri||busy||!selected.length||!account} onPress={()=>void work(async()=>{await api.sendMoment(photoUri,typeof params.caption==='string'?params.caption:'',selected);Alert.alert('Đã gửi','Khoảnh khắc đã được lưu trên máy chủ và chỉ chia sẻ với người nhận.',[{text:'Xem kỷ niệm',onPress:()=>go('memories')}]);})}/>
+    <Action label="Gửi khoảnh khắc" disabled={!photoUri||busy||!selected.length||!account} onPress={()=>void work(async()=>{
+      await queueMoment(photoUri,typeof params.caption==='string'?params.caption:'',selected);
+      await flushOutgoing();
+      Alert.alert('Đã lưu để gửi','Xem trạng thái gửi trong Kỷ niệm. Nếu mất mạng, ảnh sẽ chờ bạn thử lại.',[{text:'Xem kỷ niệm',onPress:()=>go('memories')}]);
+    })}/>
     <Action secondary label="Thêm bạn bè" onPress={()=>go('find-friends')}/></>;
-  case 'inbox':case 'memories':return <><Text style={styles.body}>{scene==='inbox'?'Những khoảnh khắc được bạn bè gửi riêng cho bạn.':'Khoảnh khắc đã gửi và được chia sẻ với bạn.'}</Text>
+   case 'inbox':case 'memories':return <><Text style={styles.body}>{scene==='inbox'?'Những khoảnh khắc được bạn bè gửi riêng cho bạn.':'Khoảnh khắc đã gửi và được chia sẻ với bạn.'}</Text>
+    {scene==='memories'&&<><Action secondary label="Thử gửi ảnh đang chờ" disabled={busy||!outgoing.some(o=>o.status==='pending'||o.status==='failed')} onPress={()=>void work(async()=>{await flushOutgoing();await refresh();})}/>
+    {outgoing.filter(o=>o.status!=='sent').map(o=><Card key={o.id}><Text style={styles.title}>{o.status==='sending'?'Đang gửi':o.status==='failed'?'Gửi thất bại':'Chờ gửi'} · {new Date(o.created).toLocaleString('vi-VN')}</Text>
+      {o.error?<Text style={styles.warning}>{o.error}</Text>:null}<Text style={styles.meta}>{o.recipientIds.length} người nhận</Text>
+      <Action secondary label="Hủy ảnh chờ gửi" disabled={busy||o.status==='sending'} onPress={()=>Alert.alert('Hủy gửi ảnh?','Ảnh chờ gửi sẽ được xóa khỏi hàng đợi.',[{text:'Giữ lại',style:'cancel'},{text:'Hủy gửi',style:'destructive',onPress:()=>{if(account){discardOutgoing(account.user.id,o.id);setOutgoing(listOutgoing(account.user.id));}}}])}/></Card>)}</>}
     {!items.length&&<Empty text="Chưa có khoảnh khắc nào. Hãy kết bạn rồi gửi ảnh đầu tiên."/>}
     {items.map(m=><Pressable key={m.id} style={styles.momentCard} onPress={()=>go(scene==='inbox'?'moment':'memory-detail',{id:m.id})}>
       {photoUrls[m.id]?<Image source={{uri:photoUrls[m.id]}} style={styles.feedImage}/>:<Empty text="Ảnh hiện không tải được"/>}
-      <Text style={styles.title}>{m.caption||'Khoảnh khắc không lời'}</Text><Text style={styles.meta}>{new Date(m.created_at).toLocaleString('vi-VN')}</Text>
+       <Text style={styles.title}>{scene==='inbox'&&!m.seen_at?'● Mới · ':''}{m.caption||'Khoảnh khắc không lời'}</Text><Text style={styles.meta}>{new Date(m.created_at).toLocaleString('vi-VN')}</Text>
     </Pressable>)}
     <Action secondary label="Chụp ảnh mới" onPress={()=>router.push('/')}/></>;
   case 'moment':case 'memory-detail':return current?<><Text style={styles.meta}>{person?.display_name||'Thành viên LUMA'} · {new Date(current.created_at).toLocaleString('vi-VN')}</Text>
@@ -128,21 +163,30 @@ export default function MomentsScene(){
     {!friendList.length&&<Empty text="Danh sách bạn bè trống."/>}{friendList.map(p=><Pressable key={p.id} style={styles.listRow} onPress={()=>go('friend-profile',{id:p.id})}><Text style={styles.title}>{p.display_name||p.handle}</Text><Text style={styles.meta}>@{p.handle} ›</Text></Pressable>)}</>;
   case 'find-friends':return <><TextInput style={styles.input} placeholder="Tìm theo username (ít nhất 2 ký tự)" placeholderTextColor={C.muted} autoCapitalize="none" value={term} onChangeText={setTerm}/>
     {!people.length&&<Empty text="Nhập username để tìm tài khoản thật."/>}{people.filter(p=>p.id!==account?.user.id).map(p=><View key={p.id} style={styles.listRow}><View style={{flex:1}}><Text style={styles.title}>{p.display_name}</Text><Text style={styles.meta}>@{p.handle}</Text></View><Pressable disabled={busy} onPress={()=>void work(async()=>{await api.requestFriend(p.id);Alert.alert('Đã gửi lời mời',p.display_name);})}><Text style={styles.link}>Thêm bạn</Text></Pressable></View>)}</>;
-  case 'requests':return <>{!invites.length&&<Empty text="Không có lời mời mới."/>}{invites.map(r=><Card key={r.id}><Text style={styles.title}>Lời mời từ {r.sender_id}</Text><View style={styles.row}><Action label="Chấp nhận" onPress={()=>void work(async()=>{await api.respondFriend(r.id,true);await refresh();})}/><Action secondary label="Từ chối" onPress={()=>void work(async()=>{await api.respondFriend(r.id,false);await refresh();})}/></View></Card>)}</>;
+   case 'requests':return <><Text style={styles.title}>Đã nhận</Text>{!invites.length&&<Empty text="Không có lời mời mới."/>}{invites.map(r=><Card key={r.id}><Text style={styles.title}>Lời mời từ {requestPeople[r.sender_id]?.display_name||'Thành viên LUMA'}</Text><Text style={styles.meta}>@{requestPeople[r.sender_id]?.handle||r.sender_id}</Text><View style={styles.row}><Action label="Chấp nhận" onPress={()=>void work(async()=>{await api.respondFriend(r.id,true);await refresh();})}/><Action secondary label="Từ chối" onPress={()=>void work(async()=>{await api.respondFriend(r.id,false);await refresh();})}/></View></Card>)}
+     <Text style={styles.title}>Đã gửi</Text>{!sentInvites.length&&<Empty text="Bạn chưa gửi lời mời nào đang chờ."/>}{sentInvites.map(r=><Card key={r.id}><Text style={styles.title}>{requestPeople[r.recipient_id]?.display_name||'Thành viên LUMA'} · Đang chờ</Text><Action secondary label="Hủy lời mời" onPress={()=>void work(async()=>{await api.cancelRequest(r.id);await refresh();})}/></Card>)}</>;
   case 'friend-profile':return person?<><Text style={styles.hero}>{person.display_name}</Text><Text style={styles.meta}>@{person.handle}</Text>
     <Action label="Chụp ảnh gửi bạn" onPress={()=>router.push('/')}/>
     <Action secondary label="Chặn người dùng" onPress={()=>Alert.alert('Chặn người này?', 'Người bị chặn sẽ không thể tiếp tục chia sẻ khoảnh khắc với bạn.',[{text:'Hủy',style:'cancel'},{text:'Chặn',style:'destructive',onPress:()=>void work(async()=>{await api.blockUser(person.id);go('privacy');})}])}/></>:<Empty text="Không tìm thấy hồ sơ này."/>;
-  case 'widget':return <><Text style={styles.hero}>LUMA trên màn hình chính</Text>
-    <Card><Text style={styles.title}>Trạng thái: chưa hỗ trợ</Text><Text style={styles.body}>Widget cập nhật ảnh bạn bè yêu cầu Android App Widget hoặc iOS WidgetKit. Bản Expo hiện tại chưa tích hợp module native. Ứng dụng không giả vờ bật widget; ảnh vẫn xem được trong Inbox.</Text></Card>
-    <Action label="Xem ảnh nhận được" onPress={()=>go('inbox')}/></>;
-  case 'notifications':return <>{!notifications.length&&<Empty text="Không có thông báo."/>}{notifications.map(n=><Pressable key={n.id} style={styles.listRow} onPress={()=>void work(async()=>{await api.readNotice(n.id);if(n.moment_id)go('moment',{id:n.moment_id});else if(n.kind==='friend_request')go('requests');else go('friends');})}>
+   case 'widget':return <><Text style={styles.hero}>LUMA trên màn hình chính</Text>
+     {widgetAvailable()?<><Card><Text style={styles.title}>Widget Android đã sẵn sàng</Text>
+       <Text style={styles.body}>Nhấn giữ màn hình chính → Widget → LUMA Moments. Ảnh vừa nhận được đồng bộ khi bạn mở LUMA hoặc nhấn nút bên dưới.</Text></Card>
+       <Text style={styles.title}>Hiển thị ảnh từ</Text>
+       <Action label={widgetFriend===null?'✓ Tất cả bạn bè':'Tất cả bạn bè'} secondary={widgetFriend!==null} onPress={()=>void work(async()=>{await setWidgetSource(null);setWidgetFriend(null);})}/>
+       {friendList.map(friend=><Action key={friend.id} label={`${widgetFriend===friend.id?'✓ ':''}${friend.display_name||friend.handle}`} secondary={widgetFriend!==friend.id} onPress={()=>void work(async()=>{await setWidgetSource(friend.id);setWidgetFriend(friend.id);})}/>)}
+       <Action label="Đồng bộ ảnh mới nhất" disabled={busy} onPress={()=>void work(async()=>{await syncWidget();Alert.alert('Đã đồng bộ','Widget đã nhận ảnh mới nhất bạn có quyền xem.');})}/>
+     </>:<Card><Text style={styles.warning}>Widget cần APK Android có module native. Expo Go không chứa module này.</Text><Text style={styles.body}>Cài bản development build hoặc APK của LUMA để thêm widget.</Text></Card>}
+     <Action secondary label="Xem ảnh nhận được" onPress={()=>go('inbox')}/></>;
+   case 'notifications':return <><Card><Text style={styles.title}>Thông báo trên điện thoại</Text><Text style={styles.body}>{devicePush?'Đang bật thông báo đẩy cho ảnh mới.':'Bật để nhận thông báo khi có ảnh mới. Danh sách bên dưới vẫn đồng bộ qua tài khoản.'}</Text>
+     <Action label={devicePush?'Tắt thông báo đẩy':'Bật thông báo đẩy'} secondary={devicePush} disabled={busy} onPress={()=>void work(async()=>{if(devicePush)await disablePush();else await enablePush();setDevicePush(!devicePush);})}/></Card>
+     {!notifications.length&&<Empty text="Không có thông báo."/>}{notifications.map(n=><Pressable key={n.id} style={styles.listRow} onPress={()=>void work(async()=>{await api.readNotice(n.id);if(n.moment_id)go('moment',{id:n.moment_id});else if(n.kind==='friend_request')go('requests');else go('friends');})}>
     <Text style={styles.title}>{n.kind==='new_moment'?'📷 Ảnh mới':n.kind==='friend_request'?'👋 Lời mời kết bạn':n.kind==='friend_accepted'?'✓ Đã trở thành bạn bè':'❤️ Phản hồi mới'}{n.read_at?'':' · Mới'}</Text>
     <Text style={styles.meta}>{new Date(n.created_at).toLocaleString('vi-VN')}</Text></Pressable>)}</>;
   case 'profile':return <><Text style={styles.hero}>{person?.display_name||account?.user.email||'LUMA'}</Text><Text style={styles.meta}>@{person?.handle||'chưa tạo hồ sơ'}</Text><Action label="Chỉnh hồ sơ" onPress={()=>go('profile-setup')}/>
     <Action secondary label="Thông báo" onPress={()=>go('notifications')}/><Action secondary label="Cài đặt" onPress={()=>go('settings')}/><Action secondary label="Thiết lập widget" onPress={()=>go('widget')}/></>;
   case 'settings':return <><Text style={styles.body}>Cài đặt camera, chất lượng JPEG và lưới căn chỉnh.</Text><Action label="Cài đặt camera" onPress={()=>router.push('/settings')}/>
     <Action secondary label="Quyền riêng tư và chặn" onPress={()=>go('privacy')}/><Action secondary label="Widget" onPress={()=>go('widget')}/>
-    <Action secondary label="Đăng xuất" disabled={!account} onPress={()=>void work(async()=>{await api.signOut();go('welcome');})}/></>;
+     <Action secondary label="Đăng xuất" disabled={!account} onPress={()=>void work(async()=>{await clearWidget();await disablePush();await api.signOut();go('welcome');})}/></>;
   case 'privacy':return <><Text style={styles.body}>Ảnh chỉ hiển thị với người nhận do bạn lựa chọn. Danh sách chặn được đồng bộ trên tài khoản.</Text>
     {!blocked.length&&<Empty text="Không có người dùng bị chặn."/>}{blocked.map(b=><View key={b.blocked_id} style={styles.listRow}><Text style={styles.meta}>{b.blocked_id}</Text><Action secondary label="Bỏ chặn" onPress={()=>void work(async()=>{await api.unblock(b.blocked_id);await refresh();})}/></View>)}</>;
   }
