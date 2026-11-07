@@ -1,10 +1,51 @@
 {
   "expo": {
-    "name": "LUMA Camera",
-    "slug": "luma-camera",
-    "scheme": "lumacamera",
+    "name": "Travel Memory Map",
+    "slug": "travel-memory-map",
+    "scheme": "travelmemorymap",
     "version": "0.1.0",
     "orientation": "portrait",
-    "userInterfaceStyle": "dark"
+    "userInterfaceStyle": "dark",
+    "plugins": [
+      "expo-router",
+      "expo-notifications",
+      ["expo-local-authentication",{"faceIDPermission":"Cho phép mở nhật ký bằng Face ID."}],
+      "expo-sharing",
+      "expo-video",
+      [
+        "expo-audio",
+        {
+          "microphonePermission": "Cho phép Travel Memory Map ghi âm kỷ niệm trong chuyến đi."
+        }
+      ],
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Cho phép Travel Memory Map chụp ảnh kỷ niệm.",
+          "microphonePermission": "Cho phép Travel Memory Map ghi âm khi quay video.",
+          "recordAudioAndroid": true
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Cho phép Travel Memory Map chọn ảnh và video cho hành trình."
+        }
+      ],
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "Cho phép Travel Memory Map gắn vị trí hiện tại vào kỷ niệm."
+        }
+      ],
+      [
+        "expo-media-library",
+        {
+          "photosPermission": "Cho phép Travel Memory Map đọc ảnh được bạn chọn.",
+          "savePhotosPermission": "Cho phép Travel Memory Map lưu ảnh vào thư viện điện thoại."
+        }
+      ],
+      "expo-asset"
+    ]
   }
 }
