@@ -12,7 +12,7 @@ import {matrixAt,PRESETS} from '../lib/presets';
 import {usePrefs} from '../state/Prefs';
 import {C} from '../theme/colors';
 import {isScene,TITLES,type Scene} from './scenes';
-import CameraScreen from '../../app/index';
+import CameraScreen from '../../app/camera';
 
 const navScenes=new Set<Scene>(['filters','library','memories','settings']);
 const date=(time:number)=>new Date(time||Date.now()).toLocaleDateString('vi-VN');
@@ -55,7 +55,7 @@ export default function StudioScene(){
   const filterMatrix=useMemo(()=>matrixAt(preset,showOriginal?0:intensity),[preset,intensity,showOriginal]);
   const colorMatrix=useMemo(()=>adjustMatrix(showOriginal?0:brightness,showOriginal?1:contrast,showOriginal?1:saturation),[brightness,contrast,saturation,showOriginal]);
   const previewWidth=width-40;const previewHeight=skImage?Math.min(480,Math.max(180,previewWidth*skImage.height()/skImage.width())):300;
-  const go=(target:Scene,extra:Record<string,string>={})=>target==='camera'?router.push('/'):
+  const go=(target:Scene,extra:Record<string,string>={})=>target==='camera'?router.push('/camera'):
     router.push({pathname:'/studio/[scene]',params:{scene:target,...extra}});
   const back=()=>router.canGoBack()?router.back():router.replace('/');
   const run=async(task:()=>Promise<void>)=>{if(busy)return;setBusy(true);try{await task();}catch(e){Alert.alert('Không thực hiện được',e instanceof Error?e.message:String(e));}finally{setBusy(false);}};
@@ -74,7 +74,7 @@ export default function StudioScene(){
   const preview=(matrix:number[])=>skImage?<View style={styles.canvasWrap}><Canvas style={{width:previewWidth,height:previewHeight}}>
     <SkImage image={skImage} x={0} y={0} width={previewWidth} height={previewHeight} fit="contain"><ColorMatrix matrix={matrix}/></SkImage>
   </Canvas></View>:<View style={styles.loading}><ActivityIndicator color={C.accent}/><Text style={styles.muted}>Đang mở ảnh…</Text></View>;
-  const requirePhoto=()=>photo?<PhotoPreview uri={photo.uri}/>:<EmptyState title="Không tìm thấy ảnh" detail="Ảnh có thể đã bị xóa khỏi LUMA." action={<Action title="Mở thư viện" onPress={()=>go('library')}/>}/>;
+  const requirePhoto=()=>photo?<PhotoPreview uri={photo.uri}/>:<EmptyState title="Không tìm thấy ảnh" detail="Ảnh có thể đã bị xóa khỏi ứng dụng." action={<Action title="Mở thư viện" onPress={()=>go('library')}/>}/>;
 
   if(scene==='pro-camera')return <CameraScreen mode="pro"/>;
   if(scene==='camera')return <CameraScreen/>;
@@ -96,7 +96,7 @@ export default function StudioScene(){
         <SectionTitle>BỘ LỌC</SectionTitle><ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chips}>{PRESETS.map(p=><Chip key={p.id} title={p.label} active={p.id===selected} onPress={()=>setSelected(p.id)}/>)}</ScrollView>
         <Action title={busy?'Đang lưu…':'Lưu thành ảnh mới'} disabled={busy||!skImage} onPress={()=>void saveVariant(()=>applyColor(name,preset.id,matrixAt(preset,intensity)))}/>
       </>:requirePhoto();
-      case 'review':return photo?<>{requirePhoto()}<Text style={styles.muted}>Đã lưu trong LUMA · {date(photo.created)}</Text>
+      case 'review':return photo?<>{requirePhoto()}<Text style={styles.muted}>Đã lưu trên thiết bị · {date(photo.created)}</Text>
         {params.undo==='1'&&photo.parent&&<Action title="Hoàn tác bước vừa rồi" secondary disabled={busy} onPress={undoVariant}/>}
         <Action title="Chỉnh sửa ảnh" onPress={()=>go('editor',{name})}/><Action title="Chia sẻ" secondary onPress={()=>go('share',{name})}/><Action title="Xem chi tiết" secondary onPress={()=>go('photo',{name})}/>
         <Action title="Chụp ảnh tiếp" secondary onPress={()=>go('camera')}/></>:requirePhoto();
@@ -136,14 +136,14 @@ export default function StudioScene(){
             <Image source={{uri:p.uri}} style={styles.compareImage} resizeMode="contain"/><Text style={styles.muted}>{i?'Sau':'Trước'}</Text></Pressable>)}
         </View></>:<EmptyState title="Đây là ảnh gốc" detail="Hãy tạo bản chỉnh sửa để so sánh trước và sau." action={<Action title="Chỉnh sửa ảnh" onPress={()=>go('editor',{name})}/>}/>}</>:requirePhoto();
       case 'export':return photo?<>{requirePhoto()}<Panel><Text style={styles.rowTitle}>Lưu vào thư viện điện thoại</Text>
-        <Text style={styles.muted}>Tạo một bản sao bên ngoài LUMA. Bản sao này còn trên máy khi xóa ảnh trong ứng dụng.</Text></Panel>
+        <Text style={styles.muted}>Tạo một bản sao trong thư viện điện thoại. Bản sao này còn trên máy khi xóa ảnh trong ứng dụng.</Text></Panel>
         <Action title={busy?'Đang xuất…':'Lưu vào máy'} disabled={busy} onPress={()=>void run(async()=>{const permission=await requestWritePermission();if(!permission.granted)throw new Error('Bạn cần cho phép lưu ảnh vào thư viện điện thoại.');
           await MediaLibrary.createAssetAsync(photo.uri);Alert.alert('Đã lưu ảnh','Ảnh đã nằm trong thư viện điện thoại.');})}/>
       </>:requirePhoto();
       case 'share':return photo?<>{requirePhoto()}<Panel><Text style={styles.rowTitle}>Chọn ứng dụng để gửi</Text>
-        <Text style={styles.muted}>Điện thoại sẽ mở bảng chia sẻ. LUMA không tự đăng công khai hoặc lưu danh sách người nhận.</Text></Panel>
+        <Text style={styles.muted}>Điện thoại sẽ mở bảng chia sẻ. Travel Memory Map không tự đăng công khai hoặc lưu danh sách người nhận.</Text></Panel>
         <Action title={busy?'Đang mở…':'Mở bảng chia sẻ'} disabled={busy} onPress={()=>void run(async()=>{if(!await Sharing.isAvailableAsync())throw new Error('Thiết bị không hỗ trợ bảng chia sẻ.');
-          await Sharing.shareAsync(photo.uri,{mimeType:'image/jpeg',dialogTitle:'Chia sẻ ảnh LUMA'});})}/>
+          await Sharing.shareAsync(photo.uri,{mimeType:'image/jpeg',dialogTitle:'Chia sẻ ảnh hành trình'});})}/>
         <Action title="Lưu vào máy" secondary onPress={()=>go('export',{name})}/>
       </>:requirePhoto();
       case 'library':return <><Text style={styles.muted}>{photos.length} ảnh lưu trên máy · không cần tài khoản</Text>
@@ -159,10 +159,10 @@ export default function StudioScene(){
         <SectionTitle>THÊM VÀO ALBUM</SectionTitle>{!albums.length?<Row title="Tạo album đầu tiên" onPress={()=>go('albums')}/>:
           albums.map(a=><Pressable key={a.id} style={styles.row} onPress={()=>void run(async()=>{await setAlbum(name,a.id,!photo.albumIds.includes(a.id));await reload();})}>
             <Text style={styles.rowTitle}>{photo.albumIds.includes(a.id)?'☑':'□'} {a.title}</Text></Pressable>)}
-        <Action title="Xóa ảnh khỏi LUMA" secondary onPress={()=>Alert.alert('Xóa ảnh?','Ảnh sẽ bị xóa khỏi LUMA. Bản đã lưu ra thư viện điện thoại không bị ảnh hưởng.',[
+        <Action title="Xóa ảnh khỏi ứng dụng" secondary onPress={()=>Alert.alert('Xóa ảnh?','Ảnh sẽ bị xóa khỏi Travel Memory Map. Bản đã lưu ra thư viện điện thoại không bị ảnh hưởng.',[
           {text:'Hủy',style:'cancel'},{text:'Xóa',style:'destructive',onPress:()=>void run(async()=>{await deleteLocalPhoto(name);router.replace({pathname:'/studio/[scene]',params:{scene:'library'}});})}])}/>
       </>:requirePhoto();
-      case 'albums':return <><Text style={styles.muted}>Sắp xếp ảnh trong LUMA. Một ảnh có thể nằm trong nhiều album.</Text>
+      case 'albums':return <><Text style={styles.muted}>Sắp xếp ảnh theo hành trình. Một ảnh có thể nằm trong nhiều album.</Text>
         <View style={styles.createRow}><TextInput style={[styles.input,{flex:1}]} placeholder="Tên album mới" placeholderTextColor={C.dim} value={albumTitle} onChangeText={setAlbumTitle} maxLength={50}/>
           <Action title="Tạo" disabled={!albumTitle.trim()||busy} onPress={()=>void run(async()=>{await createAlbum(albumTitle);setAlbumTitle('');await reload();})}/></View>
         {!albums.length&&<EmptyState title="Chưa có album" detail="Tạo album rồi thêm ảnh từ màn Chi tiết ảnh."/>}
@@ -172,7 +172,7 @@ export default function StudioScene(){
         <Action title="Thêm ảnh từ thư viện" secondary onPress={()=>go('library')}/>
         {!photos.some(p=>p.albumIds.includes(album.id))?<EmptyState title="Album còn trống" detail="Mở một ảnh rồi chọn album này trong Chi tiết ảnh."/>:
           <PhotoGrid items={photos.filter(p=>p.albumIds.includes(album.id))} onOpen={open} width={width}/>}
-        <Action title="Xóa album" secondary onPress={()=>Alert.alert('Xóa album?','Ảnh trong album vẫn được giữ trong Thư viện LUMA.',[
+        <Action title="Xóa album" secondary onPress={()=>Alert.alert('Xóa album?','Ảnh trong album vẫn được giữ trong thư viện hành trình.',[
           {text:'Hủy',style:'cancel'},{text:'Xóa',style:'destructive',onPress:()=>void run(async()=>{await deleteAlbum(album.id);go('albums');})}])}/>
       </>:<EmptyState title="Không tìm thấy album" action={<Action title="Xem album" onPress={()=>go('albums')}/>}/>;
       case 'favorites':return photos.some(p=>p.favorite)?<PhotoGrid items={photos.filter(p=>p.favorite)} onOpen={open} width={width}/>:
@@ -183,14 +183,14 @@ export default function StudioScene(){
       </>;
       case 'memories':return photos.length?sortedMonths.map(month=><View key={month}><SectionTitle>{month.toUpperCase()}</SectionTitle>
         <PhotoGrid items={photos.filter(p=>new Date(p.created).toLocaleString('vi-VN',{month:'long',year:'numeric'})===month)} onOpen={open} width={width}/></View>):
-        <EmptyState title="Chưa có kỷ niệm" detail="Ảnh chụp trong LUMA sẽ xuất hiện ở đây theo thời gian." action={<Action title="Mở camera" onPress={()=>go('camera')}/>}/>;
+        <EmptyState title="Chưa có kỷ niệm" detail="Ảnh chụp trong chuyến đi sẽ xuất hiện ở đây theo thời gian." action={<Action title="Mở camera" onPress={()=>go('camera')}/>}/>;
       case 'settings':return <><SectionTitle>CAMERA</SectionTitle>
         <Panel><View style={styles.settingRow}><View style={{flex:1}}><Text style={styles.rowTitle}>Lưới bố cục 3 × 3</Text><Text style={styles.muted}>Căn khung khi chụp</Text></View>
           <Switch value={prefs.grid} onValueChange={v=>setPrefs({grid:v})} trackColor={{true:C.accent,false:C.elevated}} thumbColor={C.white}/></View></Panel>
         <Panel><Text style={styles.rowTitle}>Hẹn giờ mặc định</Text><View style={styles.chips}>{([0,3,5,10] as const).map(n=><Chip key={n} title={n?`${n} giây`:'Tắt'} active={prefs.timer===n} onPress={()=>setPrefs({timer:n})}/>)}</View></Panel>
         <Panel><Text style={styles.rowTitle}>Chất lượng JPEG</Text><View style={styles.chips}>{[.85,.95,1].map(n=><Chip key={n} title={`${Math.round(n*100)}%`} active={prefs.quality===n} onPress={()=>setPrefs({quality:n})}/>)}</View></Panel>
         <SectionTitle>LƯU TRỮ VÀ RIÊNG TƯ</SectionTitle><Panel><Text style={styles.rowTitle}>{photos.length} ảnh · {(photos.reduce((sum,p)=>sum+p.size,0)/1048576).toFixed(1)} MB</Text>
-          <Text style={styles.muted}>Ảnh và album nằm trên thiết bị. Gỡ ứng dụng hoặc xóa dữ liệu ứng dụng có thể làm mất ảnh chưa xuất sang thư viện điện thoại. LUMA không dùng tài khoản hay tự tải ảnh lên mạng.</Text>
+          <Text style={styles.muted}>Ảnh và album nằm trên thiết bị. Gỡ ứng dụng hoặc xóa dữ liệu ứng dụng có thể làm mất ảnh chưa xuất sang thư viện điện thoại. Travel Memory Map không tự tải ảnh lên mạng.</Text>
           <Text style={styles.muted}>Chụp Pro chỉ có điều khiển mà Expo Go hỗ trợ trên thiết bị: zoom, đèn flash, hẹn giờ, đổi camera và khung ngắm.</Text></Panel>
       </>;
     }
@@ -200,7 +200,7 @@ export default function StudioScene(){
     <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={styles.content}>
       {loading?<View style={styles.loading}><ActivityIndicator color={C.accent}/></View>:body()}
     </ScrollView>
-    <BottomNav active={navScenes.has(scene)?scene:scene==='filter-preview'?'filters':'library'} navigate={target=>target==='camera'?router.replace('/'):
+    <BottomNav active={navScenes.has(scene)?scene:scene==='filter-preview'?'filters':'library'} navigate={target=>target==='camera'?router.replace('/camera'):
       router.replace({pathname:'/studio/[scene]',params:{scene:target}})}/>
   </SafeAreaView>;
 }
