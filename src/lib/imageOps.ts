@@ -68,16 +68,16 @@ export async function addDecoration(name:string,caption:string,placement:'top'|'
     const cx=w/2,cy=text?y-size*1.7:y-size*.35,r=size*.75;
     if(sticker==='circle')canvas.drawCircle(cx,cy,r,paint);
     else{
-      const path=Skia.Path.Make();
+      const builder=Skia.PathBuilder.Make();
       if(sticker==='star'){
         for(let i=0;i<10;i++){const angle=-Math.PI/2+i*Math.PI/5,rad=i%2?r*.45:r;
-          const px=cx+Math.cos(angle)*rad,py=cy+Math.sin(angle)*rad;if(i===0)path.moveTo(px,py);else path.lineTo(px,py);}
-        path.close();
+          const px=cx+Math.cos(angle)*rad,py=cy+Math.sin(angle)*rad;if(i===0)builder.moveTo(px,py);else builder.lineTo(px,py);}
+        builder.close();
       }else{
-        path.moveTo(cx,cy+r*.85).cubicTo(cx-r*1.6,cy-r*.1,cx-r*.8,cy-r*1.35,cx,cy-r*.5)
+        builder.moveTo(cx,cy+r*.85).cubicTo(cx-r*1.6,cy-r*.1,cx-r*.8,cy-r*1.35,cx,cy-r*.5)
           .cubicTo(cx+r*.8,cy-r*1.35,cx+r*1.6,cy-r*.1,cx,cy+r*.85).close();
       }
-      canvas.drawPath(path,paint);
+      canvas.drawPath(builder.detach(),paint);
     }
   }
   if(text){const x=Math.max(18,Math.round((w-font.measureText(text).width)/2));
